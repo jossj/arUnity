@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
@@ -10,6 +11,7 @@ namespace ARUnity.AR
         [SerializeField] private GameObject _scanningPanel;
         [SerializeField] private GameObject _placementPanel;
         [SerializeField] private GameObject _placedPanel;
+        [SerializeField] private GameObject _permissionDeniedPanel;
 
         [Header("HUD Elements")]
         [SerializeField] private TextMeshProUGUI _statusLabel;
@@ -24,6 +26,8 @@ namespace ARUnity.AR
         [SerializeField] private ObjectPlacementController _placementController;
         [SerializeField] private AROcclusionController _occlusionController;
         [SerializeField] private PlaneDetectionController _planeController;
+
+        public event Action ClearRequested;
 
         private bool _occlusionEnabled;
 
@@ -57,11 +61,19 @@ namespace ARUnity.AR
             _planeController.SetVisualizationEnabled(false);
         }
 
+        public void ShowPermissionDeniedUI()
+        {
+            SetPanel(_permissionDeniedPanel);
+            SetShapeSelector(false);
+            SetStatus("Camera permission required.\nPlease enable it in Settings.");
+        }
+
         private void SetPanel(GameObject active)
         {
             if (_scanningPanel != null) _scanningPanel.SetActive(_scanningPanel == active);
             if (_placementPanel != null) _placementPanel.SetActive(_placementPanel == active);
             if (_placedPanel != null) _placedPanel.SetActive(_placedPanel == active);
+            if (_permissionDeniedPanel != null) _permissionDeniedPanel.SetActive(_permissionDeniedPanel == active);
         }
 
         private void SetShapeSelector(bool visible)
@@ -79,7 +91,9 @@ namespace ARUnity.AR
         {
             _placementController.ClearAllPlacedObjects();
             _planeController.SetVisualizationEnabled(true);
-            ShowPlacementUI();
+            // State transition (Placed → Placement) is handled by AppStateManager
+            // via the ClearRequested event, which also triggers ShowPlacementUI().
+            ClearRequested?.Invoke();
         }
 
         private void OnOcclusionToggled()

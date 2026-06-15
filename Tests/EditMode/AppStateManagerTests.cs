@@ -1,5 +1,5 @@
 using NUnit.Framework;
-using ARUnity.Core;
+using ARUnity.AR;
 
 namespace ARUnity.Tests
 {
@@ -10,6 +10,7 @@ namespace ARUnity.Tests
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.Initializing));
             Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.PermissionCheck));
+            Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.PermissionDenied));
             Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.ARStarting));
             Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.Scanning));
             Assert.IsTrue(System.Enum.IsDefined(typeof(AppState), AppState.Placement));

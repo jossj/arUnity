@@ -185,7 +185,7 @@ namespace ARUnity.Editor
 
             // Scanning panel
             var scanningPanel = CreateFullscreenPanel("Scanning Panel", canvasGO.transform);
-            var scanLabel = CreateLabel("Scan Label", scanningPanel.transform,
+            CreateLabel("Scan Label", scanningPanel.transform,
                 "Move your device to detect surfaces...", 24f,
                 new Vector2(0.1f, 0.42f), new Vector2(0.9f, 0.52f));
 
@@ -204,6 +204,18 @@ namespace ARUnity.Editor
                 new Vector2(0.1f, 0.52f), new Vector2(0.9f, 0.62f));
             var clearBtn = CreateButton("Clear Button", placedPanel.transform, "Clear All",
                 new Vector2(0.3f, 0.38f), new Vector2(0.7f, 0.47f));
+
+            // Permission denied panel (hidden by default)
+            var permDeniedPanel = CreateFullscreenPanel("Permission Denied Panel", canvasGO.transform);
+            permDeniedPanel.SetActive(false);
+            var permDeniedImg = permDeniedPanel.GetComponent<Image>();
+            permDeniedImg.color = new Color(0.05f, 0.05f, 0.10f, 0.95f);
+            CreateLabel("Permission Title", permDeniedPanel.transform,
+                "Camera Permission Required", 30f,
+                new Vector2(0.1f, 0.58f), new Vector2(0.9f, 0.68f));
+            CreateLabel("Permission Body", permDeniedPanel.transform,
+                "Please enable Camera access\nin your device Settings to use AR.", 22f,
+                new Vector2(0.1f, 0.44f), new Vector2(0.9f, 0.57f));
 
             // Shape selector panel — bottom-left, shown only during Placement state
             var shapeSelectorPanel = CreateGO("Shape Selector Panel", canvasGO.transform);
@@ -239,32 +251,54 @@ namespace ARUnity.Editor
             reticleImg.color = new Color(1f, 1f, 1f, 0.85f);
             reticleGO.SetActive(false);
 
-            // Debug overlay panel (dev builds only)
+            // Debug overlay panel (dev builds only) — 5 rows: FPS, AppState, ARState, Planes, NotTracking
             var debugPanel = CreateGO("Debug Panel", canvasGO.transform);
             var debugPanelRT = debugPanel.AddComponent<RectTransform>();
-            debugPanelRT.anchorMin = new Vector2(0f, 0.7f);
-            debugPanelRT.anchorMax = new Vector2(0.5f, 0.9f);
+            debugPanelRT.anchorMin = new Vector2(0f, 0.57f);
+            debugPanelRT.anchorMax = new Vector2(0.58f, 0.92f);
             debugPanelRT.offsetMin = new Vector2(10f, 0f);
             debugPanelRT.offsetMax = new Vector2(-10f, 0f);
             var debugBg = debugPanel.AddComponent<Image>();
             debugBg.color = new Color(0f, 0f, 0f, 0.6f);
             debugPanel.SetActive(false);
 
-            var stateLabel = CreateLabel("State Label", debugPanel.transform,
-                "AR State: -", 16f, new Vector2(0f, 0.6f), new Vector2(1f, 0.9f));
-            var planeCountLabel = CreateLabel("Plane Count Label", debugPanel.transform,
-                "Planes: 0", 16f, new Vector2(0f, 0.3f), new Vector2(1f, 0.6f));
+            // Row anchors within panel (bottom-to-top, 20% each)
+            var fpsLabel = CreateLabel("FPS Label",
+                debugPanel.transform, "0 fps", 14f,
+                new Vector2(0f, 0.80f), new Vector2(1f, 1.00f));
+            var appStateLabel = CreateLabel("App State Label",
+                debugPanel.transform, "State: -", 14f,
+                new Vector2(0f, 0.60f), new Vector2(1f, 0.80f));
+            var arStateLabel = CreateLabel("AR State Label",
+                debugPanel.transform, "AR: -", 14f,
+                new Vector2(0f, 0.40f), new Vector2(1f, 0.60f));
+            var planeCountLabel = CreateLabel("Plane Count Label",
+                debugPanel.transform, "Planes: 0", 14f,
+                new Vector2(0f, 0.20f), new Vector2(1f, 0.40f));
+            var trackingReasonLabel = CreateLabel("Tracking Reason Label",
+                debugPanel.transform, "", 13f,
+                new Vector2(0f, 0.00f), new Vector2(1f, 0.20f));
+
+            // Small toggle button — top-right corner, hidden in release builds
+            var debugToggleBtn = CreateButton("Debug Toggle", canvasGO.transform, "DBG",
+                new Vector2(0.87f, 0.93f), new Vector2(1.00f, 1.00f));
+            var debugToggleImg = debugToggleBtn.GetComponent<Image>();
+            debugToggleImg.color = new Color(0.2f, 0.2f, 0.2f, 0.7f);
 
             // EventSystem + Input System UI module
             var eventSystemGO = new GameObject("EventSystem");
             eventSystemGO.AddComponent<EventSystem>();
             eventSystemGO.AddComponent<InputSystemUIInputModule>();
 
+            // ── Scene Loader ──────────────────────────────────────────────
+            // Kept on its own GO so DontDestroyOnLoad doesn't carry AR controllers
+            // into future scenes (or destroy them when the singleton guard fires).
+            new GameObject("Scene Loader").AddComponent<SceneLoader>();
+
             // ── Scene Controllers ─────────────────────────────────────────
             var controllersGO = new GameObject("Scene Controllers");
 
             var permMgr = controllersGO.AddComponent<PermissionsManager>();
-            var sceneLoader = controllersGO.AddComponent<SceneLoader>();
             var arSessionMgr = controllersGO.AddComponent<ARSessionManager>();
             var appStateMgr = controllersGO.AddComponent<AppStateManager>();
             var hudCtrl = controllersGO.AddComponent<HUDController>();
@@ -299,6 +333,7 @@ namespace ARUnity.Editor
             SetField(arUICtrl, "_scanningPanel", scanningPanel);
             SetField(arUICtrl, "_placementPanel", placementPanel);
             SetField(arUICtrl, "_placedPanel", placedPanel);
+            SetField(arUICtrl, "_permissionDeniedPanel", permDeniedPanel);
             SetField(arUICtrl, "_shapeSelectorPanel", shapeSelectorPanel);
             SetField(arUICtrl, "_statusLabel", statusTMP);
             SetField(arUICtrl, "_clearButton", clearBtn.GetComponent<Button>());
@@ -348,10 +383,16 @@ namespace ARUnity.Editor
 
             // Wire DebugOverlay
             SetField(debugOverlay, "_panel", debugPanel);
+            SetField(debugOverlay, "_toggleButton", debugToggleBtn.GetComponent<Button>());
             SetField(debugOverlay, "_arSession", arSessionGO.GetComponent<ARSession>());
             SetField(debugOverlay, "_planeManager", planeManager);
-            SetField(debugOverlay, "_sessionStateLabel", stateLabel);
+            SetField(debugOverlay, "_sessionStateLabel", arStateLabel);
             SetField(debugOverlay, "_planeCountLabel", planeCountLabel);
+            SetField(debugOverlay, "_trackingReasonLabel", trackingReasonLabel);
+
+            // Wire HUDController
+            SetField(hudCtrl, "_stateLabel", appStateLabel);
+            SetField(hudCtrl, "_fpsLabel", fpsLabel);
         }
 
         // ── Main Menu scene ───────────────────────────────────────────────
@@ -397,6 +438,35 @@ namespace ARUnity.Editor
             var eventSystemGO = new GameObject("EventSystem");
             eventSystemGO.AddComponent<EventSystem>();
             eventSystemGO.AddComponent<InputSystemUIInputModule>();
+
+            // ── Scene Loader ──────────────────────────────────────────────
+            // On its own GO so DontDestroyOnLoad only persists the loader, not a
+            // whole scene-controllers object.  The loading overlay is a child so
+            // it also persists and can fade in during the ARSession load.
+            var sceneLoaderGO = new GameObject("Scene Loader");
+            var sceneLoader = sceneLoaderGO.AddComponent<SceneLoader>();
+
+            // Loading canvas — child of Scene Loader, persists with DontDestroyOnLoad
+            var loadingCanvasGO = new GameObject("Loading Canvas");
+            loadingCanvasGO.transform.SetParent(sceneLoaderGO.transform, false);
+            var loadingCanvas = loadingCanvasGO.AddComponent<Canvas>();
+            loadingCanvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            loadingCanvas.sortingOrder = 100; // renders on top of everything
+            loadingCanvasGO.AddComponent<CanvasScaler>();
+            loadingCanvasGO.AddComponent<GraphicRaycaster>();
+
+            var loadingPanelGO = new GameObject("Loading Panel");
+            loadingPanelGO.transform.SetParent(loadingCanvasGO.transform, false);
+            var loadingRT = loadingPanelGO.AddComponent<RectTransform>();
+            loadingRT.anchorMin = Vector2.zero;
+            loadingRT.anchorMax = Vector2.one;
+            loadingRT.offsetMin = Vector2.zero;
+            loadingRT.offsetMax = Vector2.zero;
+            var loadingImg = loadingPanelGO.AddComponent<Image>();
+            loadingImg.color = Color.black;
+            loadingPanelGO.SetActive(false);
+
+            SetField(sceneLoader, "_loadingOverlay", loadingPanelGO);
         }
 
         // ── Helpers ───────────────────────────────────────────────────────

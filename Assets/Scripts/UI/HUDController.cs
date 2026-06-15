@@ -1,6 +1,6 @@
 using UnityEngine;
 using TMPro;
-using ARUnity.Core;
+using ARUnity.AR;
 
 namespace ARUnity.UI
 {

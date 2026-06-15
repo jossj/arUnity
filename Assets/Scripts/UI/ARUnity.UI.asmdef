@@ -3,6 +3,7 @@
     "rootNamespace": "ARUnity.UI",
     "references": [
         "ARUnity.Core",
+        "ARUnity.AR",
         "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
