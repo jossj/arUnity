@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using UnityEngine.XR.ARFoundation;
 using ARUnity.AR;
 
@@ -7,131 +8,175 @@ namespace ARUnity.Editor
 {
     public static class PrefabBuilder
     {
-        public const string PlaneVisualizationPrefabPath = "Assets/Prefabs/AR/PlaneVisualization.prefab";
-        public const string PlacedObjectPrefabPath = "Assets/Prefabs/AR/PlacedObject.prefab";
+        // ── Public paths (used by ARSceneBuilder) ─────────────────────────
 
-        private const string PlaneMaterialPath = "Assets/Art/Materials/PlaneVisualizationMat.mat";
-        private const string PlacedObjectMaterialPath = "Assets/Art/Materials/PlacedObjectMat.mat";
+        public const string PlaneVisualizationPrefabPath = "Assets/Prefabs/AR/PlaneVisualization.prefab";
+        public const string PlacedCubePrefabPath    = "Assets/Prefabs/AR/PlacedCube.prefab";
+        public const string PlacedSpherePrefabPath  = "Assets/Prefabs/AR/PlacedSphere.prefab";
+        public const string PlacedCapsulePrefabPath = "Assets/Prefabs/AR/PlacedCapsule.prefab";
+
+        // Keep this alias so earlier wiring in ARSceneBuilder still resolves
+        public const string PlacedObjectPrefabPath  = PlacedCubePrefabPath;
+
+        private const string PlaneMaterialPath    = "Assets/Art/Materials/PlaneVisualizationMat.mat";
+        private const string CubeMaterialPath     = "Assets/Art/Materials/PlacedCubeMat.mat";
+        private const string SphereMaterialPath   = "Assets/Art/Materials/PlacedSphereMat.mat";
+        private const string CapsuleMaterialPath  = "Assets/Art/Materials/PlacedCapsuleMat.mat";
+
+        // ── Menu entry ────────────────────────────────────────────────────
 
         [MenuItem("ARUnity/Build Assets/Build AR Prefabs")]
         public static void BuildARPrefabs()
         {
             EnsureFolders();
-            var planeMat = BuildPlaneMaterial();
-            var placedMat = BuildPlacedObjectMaterial();
-            BuildPlaneVisualizationPrefab(planeMat);
-            BuildPlacedObjectPrefab(placedMat);
+
+            var planeMat    = EnsureMaterial(PlaneMaterialPath,   BuildPlaneMaterial);
+            var cubeMat     = EnsureMaterial(CubeMaterialPath,    () => BuildPlacedMaterial("PlacedCubeMat",    new Color(0.20f, 0.50f, 1.00f)));
+            var sphereMat   = EnsureMaterial(SphereMaterialPath,  () => BuildPlacedMaterial("PlacedSphereMat",  new Color(1.00f, 0.38f, 0.28f)));
+            var capsuleMat  = EnsureMaterial(CapsuleMaterialPath, () => BuildPlacedMaterial("PlacedCapsuleMat", new Color(1.00f, 0.75f, 0.10f)));
+
+            EnsurePrimitivePrefab(PlaneVisualizationPrefabPath,  BuildPlaneVisualizationPrefab,  planeMat);
+            EnsurePrimitivePrefab(PlacedCubePrefabPath,          BuildCubePrefab,                cubeMat);
+            EnsurePrimitivePrefab(PlacedSpherePrefabPath,        BuildSpherePrefab,              sphereMat);
+            EnsurePrimitivePrefab(PlacedCapsulePrefabPath,       BuildCapsulePrefab,             capsuleMat);
+
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("[ARUnity] AR prefabs built in Assets/Prefabs/AR/");
         }
 
-        // Called by ARSceneBuilder before building the scene so prefabs exist for wiring.
         public static void EnsurePrefabsExist()
         {
-            if (AssetDatabase.LoadAssetAtPath<GameObject>(PlaneVisualizationPrefabPath) == null ||
-                AssetDatabase.LoadAssetAtPath<GameObject>(PlacedObjectPrefabPath) == null)
-            {
-                BuildARPrefabs();
-            }
+            var missing =
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlaneVisualizationPrefabPath) == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlacedCubePrefabPath)    == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlacedSpherePrefabPath)  == null ||
+                AssetDatabase.LoadAssetAtPath<GameObject>(PlacedCapsulePrefabPath) == null;
+
+            if (missing) BuildARPrefabs();
         }
 
-        // ── Materials ─────────────────────────────────────────────────────
+        // ── Material builders ─────────────────────────────────────────────
 
         private static Material BuildPlaneMaterial()
         {
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(PlaneMaterialPath);
-            if (existing != null) return existing;
-
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null)
-            {
-                shader = Shader.Find("Standard");
-                Debug.LogWarning("[ARUnity] URP Lit shader not found — falling back to Standard.");
-            }
-
+            var shader = URPLitShader();
             var mat = new Material(shader) { name = "PlaneVisualizationMat" };
 
-            // Semi-transparent green to indicate detected AR surfaces
-            mat.SetColor("_BaseColor", new Color(0.1f, 0.85f, 0.4f, 0.35f));
+            // Semi-transparent teal grid to indicate detected AR surfaces
+            mat.SetColor("_BaseColor", new Color(0.05f, 0.80f, 0.55f, 0.28f));
+            mat.SetFloat("_Metallic",   0f);
+            mat.SetFloat("_Smoothness", 0.2f);
             SetURPTransparent(mat);
-
-            AssetDatabase.CreateAsset(mat, PlaneMaterialPath);
             return mat;
         }
 
-        private static Material BuildPlacedObjectMaterial()
+        private static Material BuildPlacedMaterial(string matName, Color baseColor)
         {
-            var existing = AssetDatabase.LoadAssetAtPath<Material>(PlacedObjectMaterialPath);
-            if (existing != null) return existing;
-
-            var shader = Shader.Find("Universal Render Pipeline/Lit");
-            if (shader == null) shader = Shader.Find("Standard");
-
-            var mat = new Material(shader) { name = "PlacedObjectMat" };
-            mat.SetColor("_BaseColor", new Color(0.2f, 0.5f, 1.0f, 1.0f));
-            mat.SetFloat("_Metallic", 0.1f);
-            mat.SetFloat("_Smoothness", 0.6f);
-
-            AssetDatabase.CreateAsset(mat, PlacedObjectMaterialPath);
+            var shader = URPLitShader();
+            var mat = new Material(shader) { name = matName };
+            mat.SetColor("_BaseColor",  baseColor);
+            mat.SetFloat("_Metallic",   0.15f);
+            mat.SetFloat("_Smoothness", 0.65f);
+            // Opaque — writes depth, casts and receives shadows for a grounded AR feel
+            mat.SetFloat("_Surface", 0f); // 0 = Opaque
             return mat;
         }
 
         private static void SetURPTransparent(Material mat)
         {
-            mat.SetFloat("_Surface", 1f);       // 1 = Transparent
-            mat.SetFloat("_Blend", 0f);          // Alpha blend
-            mat.SetFloat("_ZWrite", 0f);
-            mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend",   0f);
+            mat.SetFloat("_ZWrite",  0f);
+            mat.renderQueue = (int)RenderQueue.Transparent;
             mat.SetOverrideTag("RenderType", "Transparent");
             mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
             mat.DisableKeyword("_ALPHAPREMULTIPLY_ON");
         }
 
-        // ── Prefabs ───────────────────────────────────────────────────────
-
-        private static void BuildPlaneVisualizationPrefab(Material mat)
+        private static Shader URPLitShader()
         {
-            if (AssetDatabase.LoadAssetAtPath<GameObject>(PlaneVisualizationPrefabPath) != null)
-                return;
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+            {
+                Debug.LogWarning("[ARUnity] URP Lit shader not found — falling back to Standard.");
+                shader = Shader.Find("Standard");
+            }
+            return shader;
+        }
 
-            var go = new GameObject("PlaneVisualization");
+        // ── Prefab builders ───────────────────────────────────────────────
 
-            // ARPlaneMeshVisualizer drives MeshFilter and MeshRenderer each frame
+        private static void BuildPlaneVisualizationPrefab(GameObject go, Material mat)
+        {
+            go.name = "PlaneVisualization";
             go.AddComponent<ARPlaneMeshVisualizer>();
             go.AddComponent<MeshFilter>();
             var mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = mat;
-            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-            mr.receiveShadows = false;
-
-            PrefabUtility.SaveAsPrefabAsset(go, PlaneVisualizationPrefabPath);
-            Object.DestroyImmediate(go);
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = true; // show shadow cast by placed virtual objects
         }
 
-        private static void BuildPlacedObjectPrefab(Material mat)
+        private static void BuildCubePrefab(GameObject go, Material mat)
         {
-            if (AssetDatabase.LoadAssetAtPath<GameObject>(PlacedObjectPrefabPath) != null)
-                return;
-
-            // 10 cm cube — representative AR scale for a small object
-            var go = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            go.name = "PlacedObject";
-            go.transform.localScale = Vector3.one * 0.1f;
-
-            go.GetComponent<MeshRenderer>().sharedMaterial = mat;
-
-            // Remove the Collider added by CreatePrimitive — not needed for AR placement
-            Object.DestroyImmediate(go.GetComponent<BoxCollider>());
-
-            // Scale-in animation plays automatically on Start
-            go.AddComponent<ObjectScaleAnimation>();
-
-            PrefabUtility.SaveAsPrefabAsset(go, PlacedObjectPrefabPath);
-            Object.DestroyImmediate(go);
+            go.name = "PlacedCube";
+            BuildPlacedPrimitive(go, PrimitiveType.Cube, mat);
         }
 
-        // ── Folder setup ──────────────────────────────────────────────────
+        private static void BuildSpherePrefab(GameObject go, Material mat)
+        {
+            go.name = "PlacedSphere";
+            BuildPlacedPrimitive(go, PrimitiveType.Sphere, mat);
+        }
+
+        private static void BuildCapsulePrefab(GameObject go, Material mat)
+        {
+            go.name = "PlacedCapsule";
+            BuildPlacedPrimitive(go, PrimitiveType.Capsule, mat);
+        }
+
+        private static void BuildPlacedPrimitive(GameObject root, PrimitiveType type, Material mat)
+        {
+            // Create the primitive as a child so ObjectScaleAnimation can scale from 0
+            // without affecting the anchor root transform.
+            var mesh = GameObject.CreatePrimitive(type);
+            mesh.name = "Mesh";
+            mesh.transform.SetParent(root.transform, false);
+            mesh.transform.localScale = Vector3.one * 0.1f; // 10 cm
+
+            mesh.GetComponent<MeshRenderer>().sharedMaterial = mat;
+
+            // Remove collider — AR placed objects don't need physics
+            var col = mesh.GetComponent<Collider>();
+            if (col != null) Object.DestroyImmediate(col);
+
+            // Scale-in animation on the mesh child, not the root
+            mesh.AddComponent<ObjectScaleAnimation>();
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────
+
+        private delegate void PrefabSetup(GameObject go, Material mat);
+
+        private static Material EnsureMaterial(string path, System.Func<Material> builder)
+        {
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (existing != null) return existing;
+            var mat = builder();
+            AssetDatabase.CreateAsset(mat, path);
+            return mat;
+        }
+
+        private static void EnsurePrimitivePrefab(string path, PrefabSetup setup, Material mat)
+        {
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(path) != null) return;
+
+            var go = new GameObject();
+            setup(go, mat);
+            PrefabUtility.SaveAsPrefabAsset(go, path);
+            Object.DestroyImmediate(go);
+        }
 
         private static void EnsureFolders()
         {

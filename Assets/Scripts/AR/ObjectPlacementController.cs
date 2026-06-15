@@ -102,6 +102,11 @@ namespace ARUnity.AR
             ObjectPlaced?.Invoke();
         }
 
+        public void SetObjectPrefab(GameObject prefab)
+        {
+            _objectPrefab = prefab;
+        }
+
         public void ClearAllPlacedObjects()
         {
             foreach (var obj in _placedObjects)

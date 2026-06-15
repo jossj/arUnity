@@ -66,6 +66,9 @@ namespace ARUnity.Editor
             // ── AR Session ───────────────────────────────────────────────
             var arSessionGO = new GameObject("AR Session");
             arSessionGO.AddComponent<ARSession>();
+            // ARDebugManager provides in-engine diagnostics (tracking state, subsystem list).
+            // Only renders its overlay UI in development builds.
+            arSessionGO.AddComponent<ARDebugManager>();
 
             // ── XR Origin ────────────────────────────────────────────────
             var xrOriginGO = new GameObject("XR Origin");
@@ -202,6 +205,24 @@ namespace ARUnity.Editor
             var clearBtn = CreateButton("Clear Button", placedPanel.transform, "Clear All",
                 new Vector2(0.3f, 0.38f), new Vector2(0.7f, 0.47f));
 
+            // Shape selector panel — bottom-left, shown only during Placement state
+            var shapeSelectorPanel = CreateGO("Shape Selector Panel", canvasGO.transform);
+            var shapeSelectorRT = shapeSelectorPanel.AddComponent<RectTransform>();
+            shapeSelectorRT.anchorMin = new Vector2(0.03f, 0.10f);
+            shapeSelectorRT.anchorMax = new Vector2(0.50f, 0.19f);
+            shapeSelectorRT.offsetMin = Vector2.zero;
+            shapeSelectorRT.offsetMax = Vector2.zero;
+            var shapeSelectorBg = shapeSelectorPanel.AddComponent<Image>();
+            shapeSelectorBg.color = new Color(0f, 0f, 0f, 0.55f);
+            shapeSelectorPanel.SetActive(false);
+
+            var prevShapeBtn = CreateButton("Prev Shape Button", shapeSelectorPanel.transform,
+                "◀", new Vector2(0f, 0f), new Vector2(0.2f, 1f));
+            var nextShapeBtn = CreateButton("Next Shape Button", shapeSelectorPanel.transform,
+                "▶", new Vector2(0.8f, 0f), new Vector2(1f, 1f));
+            var shapeNameLabel = CreateLabel("Shape Name Label", shapeSelectorPanel.transform,
+                "Cube", 20f, new Vector2(0.2f, 0f), new Vector2(0.8f, 1f));
+
             // Occlusion toggle — bottom-right corner
             var occlusionBtn = CreateButton("Occlusion Toggle", canvasGO.transform, "Occlusion: OFF",
                 new Vector2(0.55f, 0.02f), new Vector2(0.95f, 0.09f));
@@ -250,6 +271,7 @@ namespace ARUnity.Editor
             var debugOverlay = controllersGO.AddComponent<DebugOverlay>();
             var objectPlacementCtrl = controllersGO.AddComponent<ObjectPlacementController>();
             var arUICtrl = controllersGO.AddComponent<ARUIController>();
+            var objSelector = controllersGO.AddComponent<PlacedObjectSelector>();
 
             // Wire ARSessionManager
             SetField(arSessionMgr, "_arSession", arSessionGO.GetComponent<ARSession>());
@@ -277,6 +299,7 @@ namespace ARUnity.Editor
             SetField(arUICtrl, "_scanningPanel", scanningPanel);
             SetField(arUICtrl, "_placementPanel", placementPanel);
             SetField(arUICtrl, "_placedPanel", placedPanel);
+            SetField(arUICtrl, "_shapeSelectorPanel", shapeSelectorPanel);
             SetField(arUICtrl, "_statusLabel", statusTMP);
             SetField(arUICtrl, "_clearButton", clearBtn.GetComponent<Button>());
             SetField(arUICtrl, "_occlusionToggleButton", occlusionBtn.GetComponent<Button>());
@@ -291,6 +314,37 @@ namespace ARUnity.Editor
             SetField(appStateMgr, "_planeController", planeDetCtrl);
             SetField(appStateMgr, "_placementController", objectPlacementCtrl);
             SetField(appStateMgr, "_permissionsManager", permMgr);
+
+            // Wire PlacedObjectSelector
+            SetField(objSelector, "_placementController", objectPlacementCtrl);
+            SetField(objSelector, "_prevButton", prevShapeBtn.GetComponent<Button>());
+            SetField(objSelector, "_nextButton", nextShapeBtn.GetComponent<Button>());
+            SetField(objSelector, "_currentObjectLabel", shapeNameLabel);
+
+            var cubePrefab    = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabBuilder.PlacedCubePrefabPath);
+            var spherePrefab  = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabBuilder.PlacedSpherePrefabPath);
+            var capsulePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabBuilder.PlacedCapsulePrefabPath);
+
+            // Set _objectPrefabs array via SerializedObject
+            var selectorSO = new SerializedObject(objSelector);
+            var prefabsProp = selectorSO.FindProperty("_objectPrefabs");
+            var namesProp   = selectorSO.FindProperty("_objectNames");
+            if (prefabsProp != null && namesProp != null)
+            {
+                var prefabList = new GameObject[] { cubePrefab, spherePrefab, capsulePrefab };
+                var nameList   = new string[]     { "Cube", "Sphere", "Capsule" };
+
+                prefabsProp.arraySize = prefabList.Length;
+                namesProp.arraySize   = nameList.Length;
+
+                for (int i = 0; i < prefabList.Length; i++)
+                {
+                    if (prefabList[i] != null)
+                        prefabsProp.GetArrayElementAtIndex(i).objectReferenceValue = prefabList[i];
+                    namesProp.GetArrayElementAtIndex(i).stringValue = nameList[i];
+                }
+                selectorSO.ApplyModifiedPropertiesWithoutUndo();
+            }
 
             // Wire DebugOverlay
             SetField(debugOverlay, "_panel", debugPanel);
