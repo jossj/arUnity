@@ -10,7 +10,10 @@ namespace ARUnity.AR
     {
         [SerializeField] private ARTrackedImageManager _trackedImageManager;
 
-        // Maps reference image name to the prefab to spawn when that image is tracked
+        // Fallback overlay shown for any image that has no specific entry below
+        [SerializeField] private GameObject _defaultOverlayPrefab;
+
+        // Per-image overrides: maps reference image name to a custom prefab
         [SerializeField] private ImagePrefabEntry[] _imagePrefabs;
 
         private readonly Dictionary<string, GameObject> _prefabLookup = new();
@@ -32,12 +35,14 @@ namespace ARUnity.AR
 
         private void OnEnable()
         {
-            _trackedImageManager.trackablesChanged.AddListener(OnTrackedImagesChanged);
+            if (_trackedImageManager != null)
+                _trackedImageManager.trackablesChanged.AddListener(OnTrackedImagesChanged);
         }
 
         private void OnDisable()
         {
-            _trackedImageManager.trackablesChanged.RemoveListener(OnTrackedImagesChanged);
+            if (_trackedImageManager != null)
+                _trackedImageManager.trackablesChanged.RemoveListener(OnTrackedImagesChanged);
         }
 
         private void OnTrackedImagesChanged(ARTrackablesChangedEventArgs<ARTrackedImage> args)
@@ -54,10 +59,17 @@ namespace ARUnity.AR
 
         private void SpawnOverlay(ARTrackedImage image)
         {
-            var name = image.referenceImage.name;
-            if (!_prefabLookup.TryGetValue(name, out var prefab)) return;
+            // Prefer a per-image prefab, fall back to the default
+            if (!_prefabLookup.TryGetValue(image.referenceImage.name, out var prefab))
+                prefab = _defaultOverlayPrefab;
+
+            if (prefab == null) return;
 
             var overlay = Instantiate(prefab, image.transform);
+            overlay.transform.localPosition = Vector3.zero;
+            overlay.transform.localRotation = Quaternion.identity;
+
+            overlay.GetComponent<ImageTrackingOverlayController>()?.Initialize(image);
             _activeOverlays[image.trackableId] = overlay;
         }
 
@@ -65,15 +77,13 @@ namespace ARUnity.AR
         {
             if (!_activeOverlays.TryGetValue(image.trackableId, out var overlay)) return;
 
-            // Hide overlay when tracking is lost; show again when regained
+            // The overlay is a child of the tracked image — its world transform follows
+            // automatically. Only visibility and state label need updating here.
             var isTracked = image.trackingState == TrackingState.Tracking;
             overlay.SetActive(isTracked);
 
             if (isTracked)
-            {
-                overlay.transform.SetPositionAndRotation(
-                    image.transform.position, image.transform.rotation);
-            }
+                overlay.GetComponent<ImageTrackingOverlayController>()?.UpdateTrackingState(image);
         }
 
         private void DestroyOverlay(TrackableId id)

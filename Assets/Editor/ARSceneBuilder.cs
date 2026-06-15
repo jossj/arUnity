@@ -25,6 +25,7 @@ namespace ARUnity.Editor
         {
             EnsureScenesFolder();
             PrefabBuilder.EnsurePrefabsExist();
+            ImageTrackingBuilder.EnsureAssetsExist();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             BuildARSessionHierarchy();
             EditorSceneManager.SaveScene(scene, ARScenePath);
@@ -113,6 +114,25 @@ namespace ARUnity.Editor
             var trackedImageMgr = imageTrackingGO.AddComponent<ARTrackedImageManager>();
             var imageTrackingCtrl = imageTrackingGO.AddComponent<ImageTrackingController>();
             SetField(imageTrackingCtrl, "_trackedImageManager", trackedImageMgr);
+
+            // Wire reference image library onto ARTrackedImageManager
+            var refLibrary = AssetDatabase.LoadAssetAtPath<XRReferenceImageLibrary>(ImageTrackingBuilder.LibraryPath);
+            if (refLibrary != null)
+            {
+                var imgMgrSO = new SerializedObject(trackedImageMgr);
+                // m_SerializedLibrary is ARTrackedImageManager's backing field for referenceLibrary
+                var libProp = imgMgrSO.FindProperty("m_SerializedLibrary");
+                if (libProp != null)
+                {
+                    libProp.objectReferenceValue = refLibrary;
+                    imgMgrSO.ApplyModifiedPropertiesWithoutUndo();
+                }
+            }
+
+            // Wire default overlay prefab
+            var overlayPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(ImageTrackingBuilder.OverlayPrefabPath);
+            if (overlayPrefab != null)
+                SetField(imageTrackingCtrl, "_defaultOverlayPrefab", overlayPrefab);
 
             // Raycast + ARRaycastHandler (event-based pose feed for placement)
             var raycastManagerGO = new GameObject("Raycast Manager");
