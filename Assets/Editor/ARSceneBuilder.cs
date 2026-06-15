@@ -24,6 +24,7 @@ namespace ARUnity.Editor
         public static void BuildARSessionScene()
         {
             EnsureScenesFolder();
+            PrefabBuilder.EnsurePrefabsExist();
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             BuildARSessionHierarchy();
             EditorSceneManager.SaveScene(scene, ARScenePath);
@@ -113,10 +114,12 @@ namespace ARUnity.Editor
             var imageTrackingCtrl = imageTrackingGO.AddComponent<ImageTrackingController>();
             SetField(imageTrackingCtrl, "_trackedImageManager", trackedImageMgr);
 
-            // Raycast
+            // Raycast + ARRaycastHandler (event-based pose feed for placement)
             var raycastManagerGO = new GameObject("Raycast Manager");
             raycastManagerGO.transform.SetParent(featureControllersGO.transform, false);
             var raycastMgr = raycastManagerGO.AddComponent<ARRaycastManager>();
+            var raycastHandler = raycastManagerGO.AddComponent<ARRaycastHandler>();
+            SetField(raycastHandler, "_raycastManager", raycastMgr);
 
             // Occlusion
             var occlusionManagerGO = new GameObject("Occlusion Manager");
@@ -233,9 +236,22 @@ namespace ARUnity.Editor
             SetField(arSessionMgr, "_checkingUI", scanningPanel);
 
             // Wire ObjectPlacementController
-            SetField(objectPlacementCtrl, "_raycastManager", raycastMgr);
+            SetField(objectPlacementCtrl, "_raycastHandler", raycastHandler);
             SetField(objectPlacementCtrl, "_anchorManager", anchorMgr);
             SetField(objectPlacementCtrl, "_placementReticle", reticleGO);
+
+            // Wire prefab assets if they exist (built by PrefabBuilder)
+            var planePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabBuilder.PlaneVisualizationPrefabPath);
+            if (planePrefab != null)
+            {
+                var planeMgrSO = new SerializedObject(planeManager);
+                planeMgrSO.FindProperty("m_PlanePrefab").objectReferenceValue = planePrefab;
+                planeMgrSO.ApplyModifiedPropertiesWithoutUndo();
+            }
+
+            var placedObjectPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabBuilder.PlacedObjectPrefabPath);
+            if (placedObjectPrefab != null)
+                SetField(objectPlacementCtrl, "_objectPrefab", placedObjectPrefab);
 
             // Wire ARUIController
             SetField(arUICtrl, "_scanningPanel", scanningPanel);
@@ -253,6 +269,7 @@ namespace ARUnity.Editor
             SetField(appStateMgr, "_arSessionManager", arSessionMgr);
             SetField(appStateMgr, "_uiController", arUICtrl);
             SetField(appStateMgr, "_planeController", planeDetCtrl);
+            SetField(appStateMgr, "_placementController", objectPlacementCtrl);
             SetField(appStateMgr, "_permissionsManager", permMgr);
 
             // Wire DebugOverlay

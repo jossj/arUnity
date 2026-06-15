@@ -26,6 +26,7 @@ namespace ARUnity.Core
         [SerializeField] private ARSessionManager _arSessionManager;
         [SerializeField] private ARUIController _uiController;
         [SerializeField] private PlaneDetectionController _planeController;
+        [SerializeField] private ObjectPlacementController _placementController;
         [SerializeField] private PermissionsManager _permissionsManager;
 
         private void Awake()
@@ -50,11 +51,23 @@ namespace ARUnity.Core
         private void OnEnable()
         {
             ARSession.stateChanged += OnARSessionStateChanged;
+
+            if (_planeController != null)
+                _planeController.FirstPlaneDetected += OnFirstPlaneDetected;
+
+            if (_placementController != null)
+                _placementController.ObjectPlaced += OnObjectPlacedEvent;
         }
 
         private void OnDisable()
         {
             ARSession.stateChanged -= OnARSessionStateChanged;
+
+            if (_planeController != null)
+                _planeController.FirstPlaneDetected -= OnFirstPlaneDetected;
+
+            if (_placementController != null)
+                _placementController.ObjectPlaced -= OnObjectPlacedEvent;
         }
 
         private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
@@ -64,6 +77,9 @@ namespace ARUnity.Core
             if (args.state == ARSessionState.SessionTracking)
                 TransitionTo(AppState.Scanning);
         }
+
+        private void OnFirstPlaneDetected() => OnPlaneDetected();
+        private void OnObjectPlacedEvent() => OnObjectPlaced();
 
         public void OnPlaneDetected()
         {

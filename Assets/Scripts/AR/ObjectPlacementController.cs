@@ -1,24 +1,23 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.XR.ARFoundation;
-using UnityEngine.XR.ARSubsystems;
 
 namespace ARUnity.AR
 {
     public class ObjectPlacementController : MonoBehaviour
     {
-        [SerializeField] private ARRaycastManager _raycastManager;
+        [SerializeField] private ARRaycastHandler _raycastHandler;
         [SerializeField] private ARAnchorManager _anchorManager;
         [SerializeField] private GameObject _placementReticle;
         [SerializeField] private GameObject _objectPrefab;
         [SerializeField] private int _maxPlacedObjects = 5;
 
-        private static readonly List<ARRaycastHit> _hits = new();
         private readonly List<GameObject> _placedObjects = new();
         private bool _placementEnabled;
-        private Pose _placementPose;
-        private bool _hasValidPlacementPose;
+
+        public event Action ObjectPlaced;
 
         public bool PlacementEnabled
         {
@@ -26,72 +25,81 @@ namespace ARUnity.AR
             set
             {
                 _placementEnabled = value;
-                if (_placementReticle != null)
-                    _placementReticle.SetActive(value && _hasValidPlacementPose);
+                RefreshReticle();
             }
+        }
+
+        private void OnEnable()
+        {
+            if (_raycastHandler == null) return;
+            _raycastHandler.PoseUpdated += OnPoseUpdated;
+            _raycastHandler.PoseLost += OnPoseLost;
+        }
+
+        private void OnDisable()
+        {
+            if (_raycastHandler == null) return;
+            _raycastHandler.PoseUpdated -= OnPoseUpdated;
+            _raycastHandler.PoseLost -= OnPoseLost;
         }
 
         private void Update()
         {
             if (!_placementEnabled) return;
-
-            UpdatePlacementPose();
-            UpdateReticle();
             HandleTouchInput();
         }
 
-        private void UpdatePlacementPose()
-        {
-            var screenCenter = new Vector2(Screen.width * 0.5f, Screen.height * 0.5f);
-            _hasValidPlacementPose = _raycastManager.Raycast(
-                screenCenter, _hits, TrackableType.PlaneWithinPolygon);
-
-            if (_hasValidPlacementPose)
-                _placementPose = _hits[0].pose;
-        }
-
-        private void UpdateReticle()
+        private void OnPoseUpdated(Pose pose, ARTrackable trackable)
         {
             if (_placementReticle == null) return;
-            _placementReticle.SetActive(_hasValidPlacementPose);
+            _placementReticle.SetActive(_placementEnabled);
+            _placementReticle.transform.SetPositionAndRotation(pose.position, pose.rotation);
+        }
 
-            if (_hasValidPlacementPose)
-            {
-                _placementReticle.transform.SetPositionAndRotation(
-                    _placementPose.position, _placementPose.rotation);
-            }
+        private void OnPoseLost()
+        {
+            if (_placementReticle != null)
+                _placementReticle.SetActive(false);
+        }
+
+        private void RefreshReticle()
+        {
+            if (_placementReticle == null) return;
+            var show = _placementEnabled && _raycastHandler != null && _raycastHandler.HasValidPose;
+            _placementReticle.SetActive(show);
         }
 
         private void HandleTouchInput()
         {
-            if (!_hasValidPlacementPose) return;
+            if (_raycastHandler == null || !_raycastHandler.HasValidPose) return;
             if (Touchscreen.current == null) return;
 
-            var touch = Touchscreen.current.primaryTouch;
-            if (touch.phase.ReadValue() == UnityEngine.InputSystem.TouchPhase.Began)
+            if (Touchscreen.current.primaryTouch.phase.ReadValue() == UnityEngine.InputSystem.TouchPhase.Began)
                 TryPlaceObject();
         }
 
         private void TryPlaceObject()
         {
-            if (_placedObjects.Count >= _maxPlacedObjects)
-            {
-                var oldest = _placedObjects[0];
-                _placedObjects.RemoveAt(0);
-                Destroy(oldest);
-            }
+            if (_objectPrefab == null) return;
 
-            // AttachAnchor keeps the object fixed to the plane as ARCore/ARKit refines geometry
-            var hitPlane = _hits[0].trackable as ARPlane;
+            var hitPlane = _raycastHandler.HitTrackable as ARPlane;
             if (hitPlane == null) return;
 
-            var anchor = _anchorManager.AttachAnchor(hitPlane, _placementPose);
+            var anchor = _anchorManager.AttachAnchor(hitPlane, _raycastHandler.CurrentPose);
             if (anchor == null) return;
+
+            if (_placedObjects.Count >= _maxPlacedObjects)
+            {
+                Destroy(_placedObjects[0]);
+                _placedObjects.RemoveAt(0);
+            }
 
             var placed = Instantiate(_objectPrefab, anchor.transform);
             placed.transform.localPosition = Vector3.zero;
             placed.transform.localRotation = Quaternion.identity;
             _placedObjects.Add(placed);
+
+            ObjectPlaced?.Invoke();
         }
 
         public void ClearAllPlacedObjects()
