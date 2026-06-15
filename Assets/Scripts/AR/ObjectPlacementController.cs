@@ -10,7 +10,6 @@ namespace ARUnity.AR
     {
         [SerializeField] private ARRaycastManager _raycastManager;
         [SerializeField] private ARAnchorManager _anchorManager;
-        [SerializeField] private ARPlaneManager _planeManager;
         [SerializeField] private GameObject _placementReticle;
         [SerializeField] private GameObject _objectPrefab;
         [SerializeField] private int _maxPlacedObjects = 5;

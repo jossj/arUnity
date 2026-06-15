@@ -1,7 +1,17 @@
 {
     "name": "ARUnity.Editor",
     "rootNamespace": "ARUnity.Editor",
-    "references": [],
+    "references": [
+        "ARUnity.AR",
+        "ARUnity.Core",
+        "ARUnity.UI",
+        "Unity.XR.ARFoundation",
+        "Unity.XR.ARSubsystems",
+        "Unity.XR.CoreUtils",
+        "Unity.InputSystem",
+        "Unity.TextMeshPro",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
     "includePlatforms": [
         "Editor"
     ],
