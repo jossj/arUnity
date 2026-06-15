@@ -1,7 +1,7 @@
 # CLAUDE.md — arUnity Project
 
 ## Unity Version
-Unity 6000.0.26f1 (Unity 6 LTS)
+Unity 6000.4.11f1 (Unity 6.4)
 
 ## Packages
 - AR Foundation 6.0.x
