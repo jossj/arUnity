@@ -1,10 +1,7 @@
 {
     "name": "ARUnity.Core",
     "rootNamespace": "ARUnity.Core",
-    "references": [
-        "Unity.XR.ARFoundation",
-        "Unity.XR.ARSubsystems"
-    ],
+    "references": [],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
